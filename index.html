@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Global Chat</title>
+<meta name="theme-color" content="#07060f">
+<style>
+:root{
+  --bg:#07060f; --ink:#f3f1ff; --muted:#9a96b8;
+  --glass:rgba(255,255,255,.06); --glass2:rgba(255,255,255,.1); --line:rgba(255,255,255,.12);
+  --a1:#8b5cf6; --a2:#22d3ee; --pink:#f472b6;
+  --gold:#fbbf24; --admin:#fb7185; --ok:#34d399; --warn:#f59e0b;
+  --other:rgba(255,255,255,.08); --shadow:0 12px 40px rgba(0,0,0,.45);
+  --blob1:#7c3aed; --blob2:#06b6d4; --blob3:#ec4899;
+}
+@media (prefers-color-scheme:light){
+  :root{
+    --bg:#f6f4ff; --ink:#1b1740; --muted:#6d6a8c;
+    --glass:rgba(255,255,255,.65); --glass2:rgba(255,255,255,.9); --line:rgba(60,40,140,.14);
+    --other:rgba(255,255,255,.85); --shadow:0 12px 40px rgba(80,60,160,.18);
+    --blob1:#c4b5fd; --blob2:#a5f3fc; --blob3:#fbcfe8;
+  }
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:var(--bg);color:var(--ink);overflow:hidden;
+  font-family:"Inter","SF Pro Display","Segoe UI",system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;
+  font-size:15px;-webkit-font-smoothing:antialiased;
+}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+input,textarea,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--a2);outline-offset:2px}
+
+/* aurora background */
+#bg{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none}
+#bg i{position:absolute;width:55vmax;height:55vmax;border-radius:50%;filter:blur(90px);opacity:.55;animation:drift 26s ease-in-out infinite alternate}
+#bg i:nth-child(1){background:var(--blob1);top:-18vmax;left:-14vmax}
+#bg i:nth-child(2){background:var(--blob2);bottom:-22vmax;right:-16vmax;animation-delay:-9s;opacity:.4}
+#bg i:nth-child(3){background:var(--blob3);top:35%;left:40%;width:34vmax;height:34vmax;animation-delay:-17s;opacity:.28}
+@keyframes drift{to{transform:translate(8vmax,6vmax) scale(1.15)}}
+@media(prefers-reduced-motion:reduce){#bg i{animation:none}}
+
+.glass{background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(20px) saturate(140%);-webkit-backdrop-filter:blur(20px) saturate(140%)}
+
+#app{position:relative;z-index:1;height:100%;max-width:880px;margin:0 auto;display:flex;flex-direction:column;padding:0 12px}
+
+/* top bar */
+.bar{display:flex;align-items:center;gap:12px;margin-top:calc(10px + env(safe-area-inset-top,0px));padding:9px 10px 9px 12px;border-radius:22px;box-shadow:var(--shadow);flex:none}
+.orb{width:40px;height:40px;border-radius:14px;flex:none;background:conic-gradient(from 210deg,var(--a1),var(--a2),var(--pink),var(--a1));position:relative;box-shadow:0 0 22px color-mix(in srgb,var(--a1) 55%,transparent)}
+.orb::after{content:"";position:absolute;inset:7px;border-radius:9px;background:var(--bg);opacity:.82}
+.hinfo{flex:1;min-width:0}
+.hinfo b{display:block;font-size:17px;font-weight:800;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hinfo small{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12.5px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--warn);flex:none}
+.dot.on{background:var(--ok);box-shadow:0 0 0 0 rgba(52,211,153,.6);animation:pulse 2s infinite}
+@keyframes pulse{70%{box-shadow:0 0 0 7px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
+@media(prefers-reduced-motion:reduce){.dot.on{animation:none}}
+.icon{width:40px;height:40px;border-radius:14px;display:grid;place-items:center;background:linear-gradient(135deg,color-mix(in srgb,var(--admin) 85%,transparent),#f97316);color:#fff;box-shadow:0 6px 18px rgba(251,113,133,.35)}
+.icon[hidden]{display:none}
+.me{display:flex;align-items:center;gap:8px;padding:4px 12px 4px 4px;border-radius:18px;background:var(--glass2);border:1px solid var(--line);max-width:150px}
+.me span:last-child{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.av{width:32px;height:32px;border-radius:12px;display:grid;place-items:center;font-size:12.5px;font-weight:800;color:#fff;flex:none;text-shadow:0 1px 2px rgba(0,0,0,.3)}
+
+.pin{display:flex;gap:10px;align-items:flex-start;margin-top:10px;padding:10px 14px;border-radius:16px;font-size:13.5px;line-height:1.45;flex:none;border-left:3px solid var(--gold)}
+.pin[hidden]{display:none}
+.pin span:last-child{overflow-wrap:anywhere}
+
+/* messages */
+#messages{flex:1;overflow-y:auto;padding:14px 2px 10px;display:flex;flex-direction:column;gap:2px;overscroll-behavior:contain;scrollbar-width:thin}
+.day{align-self:center;margin:14px 0 8px;padding:4px 14px;border-radius:99px;font-size:12px;color:var(--muted);background:var(--glass);border:1px solid var(--line)}
+.sys{align-self:center;margin:8px 0;padding:6px 14px;border-radius:99px;font-size:12.5px;background:var(--glass2);border:1px solid var(--line);text-align:center}
+.welcome{align-self:center;max-width:520px;margin:8px 0 14px;padding:14px 18px;border-radius:18px;text-align:center;font-size:14px;line-height:1.5}
+.announce{align-self:center;width:min(100%,520px);margin:12px 0;padding:16px 18px;border-radius:20px;text-align:center;color:#fff;
+  background:linear-gradient(135deg,var(--a1),var(--pink));box-shadow:0 10px 30px color-mix(in srgb,var(--a1) 45%,transparent)}
+.announce .t{font-size:11px;letter-spacing:.14em;text-transform:uppercase;opacity:.85;margin-bottom:6px;font-weight:700}
+.announce .b{font-size:16px;font-weight:700;line-height:1.4;overflow-wrap:anywhere;white-space:pre-wrap}
+.empty{margin:auto;text-align:center;color:var(--muted);padding:14px 20px;border-radius:18px;font-size:14px}
+
+.row{display:flex;gap:8px;align-items:flex-end;max-width:100%}
+.row.out{flex-direction:row-reverse}
+.row.first{margin-top:10px}
+.spacer{width:32px;flex:none}
+.col{display:flex;flex-direction:column;min-width:0;max-width:min(78%,560px)}
+.row.out .col{align-items:flex-end}
+.who{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;margin:0 4px 3px}
+.tag{font-size:9.5px;font-weight:800;letter-spacing:.08em;padding:2px 6px;border-radius:6px;color:#fff}
+.tag.admin{background:linear-gradient(135deg,#fb7185,#f97316)}
+.tag.vip{background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#3b2a00}
+.bubble{position:relative;padding:8px 13px 6px;border-radius:20px;line-height:1.42;overflow-wrap:anywhere;cursor:pointer;
+  background:var(--other);border:1px solid var(--line);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 2px 10px rgba(0,0,0,.12)}
+.row.in .bubble{border-top-left-radius:6px}
+.row.out .bubble{border-top-right-radius:6px;color:#fff;border-color:transparent;background:linear-gradient(135deg,var(--a1),var(--a2))}
+.row.grouped .bubble{border-radius:20px}
+.bubble.vip{border-color:var(--gold);box-shadow:0 0 0 1px color-mix(in srgb,var(--gold) 50%,transparent),0 4px 18px color-mix(in srgb,var(--gold) 28%,transparent)}
+.row.out .bubble.vip{background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#3b2a00}
+.bubble.admin{border-color:var(--admin);box-shadow:0 0 0 1px color-mix(in srgb,var(--admin) 55%,transparent),0 4px 18px color-mix(in srgb,var(--admin) 30%,transparent)}
+.row.out .bubble.admin{background:linear-gradient(135deg,#f43f5e,#f97316);color:#fff}
+.body{white-space:pre-wrap}
+.meta{font-size:10.5px;opacity:.65;text-align:end;margin-top:2px}
+.reacts{display:flex;flex-wrap:wrap;gap:4px;margin:3px 4px 0}
+.chip{display:inline-flex;gap:4px;align-items:center;padding:2px 8px;border-radius:99px;font-size:12.5px;background:var(--glass2);border:1px solid var(--line)}
+.chip.mine{border-color:var(--a2);background:color-mix(in srgb,var(--a2) 22%,transparent)}
+.abar{display:none;gap:2px;align-items:center;margin:5px 2px 0;padding:4px 6px;border-radius:99px;background:var(--glass2);border:1px solid var(--line);box-shadow:var(--shadow)}
+.row.open .abar{display:flex}
+.abar button{width:34px;height:34px;border-radius:50%;font-size:18px;display:grid;place-items:center}
+.abar button:hover{background:var(--glass)}
+.abar .sep{width:1px;height:20px;background:var(--line);margin:0 3px}
+
+/* composer */
+#emojis{display:none;flex-wrap:wrap;gap:2px;padding:8px;border-radius:18px;margin-bottom:8px;flex:none}
+#emojis.open{display:flex}
+#emojis button{font-size:23px;width:40px;height:40px;border-radius:12px}
+#emojis button:hover{background:var(--glass2)}
+#composer{flex:none;padding:6px 0 calc(12px + env(safe-area-inset-bottom,0px))}
+.pill{display:flex;align-items:flex-end;gap:6px;padding:6px;border-radius:26px;box-shadow:var(--shadow)}
+#emojibtn{width:42px;height:42px;border-radius:50%;font-size:21px;flex:none}
+#emojibtn:hover{background:var(--glass2)}
+#text{flex:1;resize:none;border:0;background:transparent;padding:10px 4px;max-height:130px;min-height:42px;line-height:1.4}
+#text:focus{outline:none}
+#text::placeholder{color:var(--muted)}
+#send{width:44px;height:44px;border-radius:50%;flex:none;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,var(--a1),var(--a2));box-shadow:0 6px 18px color-mix(in srgb,var(--a1) 50%,transparent);transition:transform .15s}
+#send:active{transform:scale(.92)}
+#send:disabled,#text:disabled{opacity:.45;cursor:not-allowed}
+
+/* admin panel */
+#scrim{position:fixed;inset:0;background:rgba(0,0,0,.5);backdrop-filter:blur(3px);z-index:40;opacity:0;pointer-events:none;transition:opacity .25s}
+#scrim.show{opacity:1;pointer-events:auto}
+#panel{position:fixed;top:0;right:0;bottom:0;width:min(440px,100%);z-index:41;transform:translateX(105%);transition:transform .3s cubic-bezier(.2,.8,.2,1);
+  display:flex;flex-direction:column;background:color-mix(in srgb,var(--bg) 88%,transparent);border-left:1px solid var(--line);backdrop-filter:blur(26px);-webkit-backdrop-filter:blur(26px);padding-top:env(safe-area-inset-top,0px)}
+#panel.open{transform:none}
+@media(prefers-reduced-motion:reduce){#panel,#scrim{transition:none}}
+.ph{display:flex;align-items:center;gap:10px;padding:16px 16px 10px}
+.ph .badge{width:38px;height:38px;border-radius:13px;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,#fb7185,#f97316)}
+.ph h2{margin:0;font-size:18px;letter-spacing:-.02em;flex:1}
+.ph h2 small{display:block;font-size:12px;font-weight:500;color:var(--muted);letter-spacing:0}
+.x{width:36px;height:36px;border-radius:12px;font-size:18px}
+.x:hover{background:var(--glass2)}
+.tabs{display:flex;gap:4px;margin:4px 16px 8px;padding:4px;border-radius:16px;background:var(--glass);border:1px solid var(--line)}
+.tabs button{flex:1;padding:8px;border-radius:12px;font-size:13.5px;font-weight:700;color:var(--muted)}
+.tabs button.on{background:linear-gradient(135deg,var(--a1),var(--a2));color:#fff}
+#pbody{flex:1;overflow-y:auto;padding:4px 16px calc(20px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:10px}
+.card{padding:14px;border-radius:18px;background:var(--glass);border:1px solid var(--line)}
+.card h3{margin:0 0 3px;font-size:14px;font-weight:800}
+.card p{margin:0 0 10px;font-size:12.5px;color:var(--muted);line-height:1.45}
+.line{display:flex;align-items:center;gap:10px;justify-content:space-between}
+.field{width:100%;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--glass);resize:vertical;min-height:42px}
+.field:focus{outline:2px solid var(--a2);outline-offset:0}
+.btns{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.btn{padding:9px 14px;border-radius:12px;font-size:13px;font-weight:700;background:var(--glass2);border:1px solid var(--line)}
+.btn:hover{border-color:var(--a2)}
+.btn.pri{background:linear-gradient(135deg,var(--a1),var(--a2));color:#fff;border-color:transparent}
+.btn.danger{background:linear-gradient(135deg,#f43f5e,#f97316);color:#fff;border-color:transparent}
+.sw{position:relative;width:48px;height:28px;flex:none}
+.sw input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;margin:0}
+.sw s{position:absolute;inset:0;border-radius:99px;background:var(--glass2);border:1px solid var(--line);transition:.2s;pointer-events:none}
+.sw s::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 2px 6px rgba(0,0,0,.3)}
+.sw input:checked+s{background:linear-gradient(135deg,var(--a1),var(--a2));border-color:transparent}
+.sw input:checked+s::after{transform:translateX(20px)}
+.sw input:focus-visible+s{outline:2px solid var(--a2);outline-offset:2px}
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.stat{padding:12px;border-radius:16px;background:var(--glass);border:1px solid var(--line)}
+.stat b{display:block;font-size:24px;letter-spacing:-.03em}
+.stat span{font-size:12px;color:var(--muted)}
+.urow{display:flex;align-items:center;gap:10px;padding:10px;border-radius:16px;background:var(--glass);border:1px solid var(--line)}
+.urow .info{flex:1;min-width:0}
+.urow .nm{font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.urow .st{display:flex;gap:4px;flex-wrap:wrap;margin-top:3px}
+.pill-s{font-size:10px;font-weight:800;padding:2px 7px;border-radius:99px;letter-spacing:.05em;background:var(--glass2);border:1px solid var(--line)}
+.pill-s.on{color:var(--ok)} .pill-s.bad{color:var(--admin)} .pill-s.warn{color:var(--warn)} .pill-s.gold{color:var(--gold)}
+.ua{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;max-width:150px}
+.ua button{padding:5px 9px;border-radius:9px;font-size:11.5px;font-weight:700;background:var(--glass2);border:1px solid var(--line)}
+.ua button:hover{border-color:var(--a2)}
+.none{color:var(--muted);text-align:center;padding:20px;font-size:13.5px}
+
+#toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(16px);z-index:60;padding:10px 18px;border-radius:99px;font-size:14px;font-weight:600;
+  background:var(--ink);color:var(--bg);opacity:0;pointer-events:none;transition:.25s;max-width:90%;text-align:center}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+@media(prefers-reduced-motion:reduce){#toast{transition:none}}
+</style>
+</head>
+<body>
+<div id="bg"><i></i><i></i><i></i></div>
+
+<div id="app">
+  <header class="bar glass">
+    <div class="orb"></div>
+    <div class="hinfo">
+      <b id="title">Global Chat</b>
+      <small><span class="dot" id="dot"></span><span id="status">Connecting…</span></small>
+    </div>
+    <button class="icon" id="adminBtn" title="Admin panel" aria-label="Admin panel" hidden>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 4 5v6c0 5 3.4 9.3 8 11 4.6-1.7 8-6 8-11V5l-8-3zm0 6a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zm0 11.2c-2-.8-3.7-2.4-4.7-4.4 1-1 3-1.6 4.7-1.6s3.7.6 4.7 1.6c-1 2-2.7 3.6-4.7 4.4z"/></svg>
+    </button>
+    <button class="me" id="meBtn" title="Change your name"><span class="av" id="meAv"></span><span id="meName"></span></button>
+  </header>
+
+  <div class="pin glass" id="pin" hidden><span>📌</span><span id="pinText"></span></div>
+
+  <main id="messages" aria-live="polite"></main>
+
+  <div id="emojis" class="glass"></div>
+  <footer id="composer">
+    <div class="pill glass">
+      <button id="emojibtn" aria-label="Emoji">😊</button>
+      <textarea id="text" rows="1" placeholder="Write a message…" maxlength="1000"></textarea>
+      <button id="send" aria-label="Send"><svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg></button>
+    </div>
+  </footer>
+</div>
+
+<div id="scrim"></div>
+<aside id="panel" aria-label="Admin panel">
+  <div class="ph">
+    <div class="badge"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 4 5v6c0 5 3.4 9.3 8 11 4.6-1.7 8-6 8-11V5l-8-3z"/></svg></div>
+    <h2>Admin console<small id="psub">Moderate and manage the room</small></h2>
+    <button class="x" id="pclose" aria-label="Close">✕</button>
+  </div>
+  <div class="tabs" id="tabs">
+    <button data-t="controls" class="on">Room</button>
+    <button data-t="users">Users</button>
+    <button data-t="tools">Tools</button>
+  </div>
+  <div id="pbody"></div>
+</aside>
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<script>
+/* ===== Settings (all optional) ===== */
+const VIP_COMMAND = "/NARO";            // type this in the chat to become VIP
+const ADMIN_COMMAND = "/ADMIN";         // type: /ADMIN yourpassword
+const ADMIN_PASS = "naro-admin";        // CHANGE THIS before publishing
+const ROOM = "naro-k7x2p9m4q1";         // change to your own random string to keep your room private
+const BROKERS = [                       // free public servers, no signup or keys; all are used at once
+  "wss://broker.hivemq.com:8884/mqtt",
+  "wss://broker.emqx.io:8084/mqtt",
+  "wss://test.mosquitto.org:8081",
+  "wss://mqtt.eclipseprojects.io:443/mqtt"
+];
+/* =================================== */
+
+const P = "naro-chat/" + ROOM + "/";
+const REACTS = ["👍","❤️","😂","😮","😢","🔥"];
+const $ = (id) => document.getElementById(id);
+const store = {
+  get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } },
+  set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+};
+function el(tag, cls, text){ const e = document.createElement(tag); if(cls) e.className = cls; if(text != null) e.textContent = text; return e; }
+
+/* identity (automatic, no login) */
+let me = null;
+try { me = JSON.parse(store.get("chat_me") || "null"); } catch(e){}
+if(!me || !me.uid){
+  me = { uid:"u" + Math.random().toString(36).slice(2,10) + Date.now().toString(36),
+         name:"Guest" + Math.floor(1000 + Math.random()*9000), vip:false, admin:false };
+}
+const saveMe = () => store.set("chat_me", JSON.stringify(me));
+saveMe();
+
+function toast(t){
+  const x = $("toast"); x.textContent = t; x.classList.add("show");
+  clearTimeout(toast._t); toast._t = setTimeout(()=>x.classList.remove("show"), 2800);
+}
+function hue(s){ let h = 0; for(const c of String(s)) h = (h*31 + c.charCodeAt(0)) >>> 0; return h % 360; }
+function avatar(uid, name, cls){
+  const a = el("span", cls || "av"); const h = hue(uid);
+  a.style.background = "linear-gradient(135deg,hsl(" + h + " 80% 58%),hsl(" + ((h+55)%360) + " 80% 46%))";
+  a.textContent = (String(name).trim().split(/\s+/).map(w => w[0] || "").join("").slice(0,2) || "?").toUpperCase();
+  return a;
+}
+function nameColor(uid){ return "hsl(" + hue(uid) + " 75% 62%)"; }
+function dayLabel(ts){
+  const d = new Date(ts), t = new Date(), y = new Date(t); y.setDate(t.getDate()-1);
+  const k = (x)=>x.getFullYear()+"-"+x.getMonth()+"-"+x.getDate();
+  if(k(d)===k(t)) return "Today"; if(k(d)===k(y)) return "Yesterday";
+  return d.toLocaleDateString(undefined,{day:"numeric",month:"long",year:"numeric"});
+}
+const timeFmt = (ts)=>new Date(ts).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
+
+/* ---------- shared room state ---------- */
+const defaults = { v:0, title:"Global Chat", pin:"", slow:0, lock:false, words:[], accent:"", welcome:"" };
+let settings = Object.assign({}, defaults);
+const msgs = new Map(), peers = new Map(), bans = new Map(), reacts = new Map();
+const clients = [];
+let renderT = null, openId = null, lastNewest = null, firstRender = true;
+const box = $("messages");
+const presTopic = P + "p/" + me.uid;
+
+const connectedCount = () => clients.filter(c => c.connected).length;
+function pubAll(topic, payload, opts){ clients.forEach(c => { if(c.connected) c.publish(topic, payload, opts || { retain:true, qos:1 }); }); }
+function beat(){ pubAll(presTopic, JSON.stringify({ name:me.name, ts:Date.now() }), { retain:true, qos:0 }); }
+
+function activeBan(uid){
+  const b = bans.get(uid); if(!b) return null;
+  if(b.until && b.until < Date.now()) return null;
+  return b;
+}
+const isBanned = (uid) => { const b = activeBan(uid); return !!(b && b.type === "ban"); };
+
+function mask(t){
+  if(!settings.words.length) return t;
+  let out = t;
+  for(const w of settings.words){
+    if(!w) continue;
+    out = out.replace(new RegExp(w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), "•".repeat(Math.min(w.length, 6)));
+  }
+  return out;
+}
+
+function blockReason(){
+  if(me.admin) return "";
+  const b = activeBan(me.uid);
+  if(b) return b.type === "ban" ? "You have been banned from this chat" : "You are muted" + (b.until ? " until " + timeFmt(b.until) : "");
+  if(settings.lock) return "Chat is locked by an admin";
+  return "";
+}
+function updateComposer(){
+  const r = blockReason();
+  $("text").disabled = !!r; $("send").disabled = !!r;
+  $("text").placeholder = r || "Write a message…";
+}
+
+function applyMe(){
+  document.body.classList.toggle("vip", !!me.vip);
+  $("adminBtn").hidden = !me.admin;
+  $("meName").textContent = me.name;
+  const a = avatar(me.uid, me.name); $("meAv").replaceWith(a); a.id = "meAv";
+}
+function applySettings(){
+  $("title").textContent = settings.title || "Global Chat";
+  document.title = settings.title || "Global Chat";
+  $("pin").hidden = !settings.pin; $("pinText").textContent = settings.pin;
+  const r = document.documentElement.style;
+  if(/^#[0-9a-f]{6}$/i.test(settings.accent)){
+    r.setProperty("--a1", settings.accent);
+    r.setProperty("--a2", "color-mix(in srgb," + settings.accent + " 50%,#22d3ee)");
+  } else { r.removeProperty("--a1"); r.removeProperty("--a2"); }
+  updateComposer(); scheduleRender();
+}
+function saveSettings(patch){
+  settings = Object.assign({}, settings, patch, { v:Date.now() });
+  pubAll(P + "c/settings", JSON.stringify(settings));
+  applySettings(); toast("Saved");
+}
+
+$("meBtn").onclick = () => {
+  const n = prompt("Your name", me.name);
+  if(n && n.trim()){ me.name = n.trim().slice(0,24); saveMe(); applyMe(); beat(); }
+};
+
+/* ---------- networking ---------- */
+function onMessage(topic, payload){
+  if(!topic.startsWith(P)) return;
+  const raw = payload.toString();
+  const parts = topic.slice(P.length).split("/");
+  const kind = parts[0];
+
+  if(kind === "m"){
+    const id = parts[1];
+    if(!raw){ msgs.delete(id); reacts.delete(id); scheduleRender(); return; }
+    try{
+      const m = JSON.parse(raw);
+      if(!m.type && typeof m.text !== "string") return;
+      m.text = String(m.text || "").slice(0,1000);
+      m.name = String(m.name || "Unknown").slice(0,24);
+      m.ts = Number(m.ts) || 0;
+      msgs.set(id, m); scheduleRender();
+    }catch(e){}
+  } else if(kind === "p"){
+    const uid = parts[1];
+    if(!raw) peers.delete(uid);
+    else { try{ const p = JSON.parse(raw); peers.set(uid, { name:String(p.name||"").slice(0,24), ts:Number(p.ts)||0 }); }catch(e){} }
+    updateStatus(); refreshPanel("users");
+  } else if(kind === "r"){
+    const id = parts[1], uid = parts[2];
+    let mp = reacts.get(id);
+    if(!raw || !REACTS.includes(raw)){ if(mp){ mp.delete(uid); if(!mp.size) reacts.delete(id); } }
+    else { if(!mp){ mp = new Map(); reacts.set(id, mp); } mp.set(uid, raw); }
+    scheduleRender();
+  } else if(kind === "c"){
+    const sub = parts[1];
+    if(sub === "settings"){
+      try{
+        const s = JSON.parse(raw);
+        if((Number(s.v)||0) >= settings.v){
+          settings = Object.assign({}, defaults, {
+            v:Number(s.v)||0, title:String(s.title||"").slice(0,40) || defaults.title, pin:String(s.pin||"").slice(0,500),
+            slow:Math.max(0, Math.min(600, Number(s.slow)||0)), lock:!!s.lock,
+            words:Array.isArray(s.words) ? s.words.map(w => String(w).slice(0,30)).slice(0,100) : [],
+            accent:/^#[0-9a-f]{6}$/i.test(s.accent) ? s.accent : "", welcome:String(s.welcome||"").slice(0,500)
+          });
+          applySettings();
+        }
+      }catch(e){}
+    } else if(sub === "ban"){
+      const uid = parts[2];
+      if(!raw) bans.delete(uid);
+      else { try{ const b = JSON.parse(raw); bans.set(uid, { type:b.type === "ban" ? "ban" : "mute", until:Number(b.until)||0, name:String(b.name||"").slice(0,24) }); }catch(e){} }
+      updateComposer(); scheduleRender(); refreshPanel("users");
+    } else if(sub === "vip"){
+      const uid = parts[2];
+      if(uid === me.uid){
+        if(raw){ me.vip = true; me.granted = true; saveMe(); applyMe(); }
+        else if(me.granted){ me.vip = false; me.granted = false; saveMe(); applyMe(); }
+      }
+    }
+  }
+}
+
+function startClient(url){
+  const c = mqtt.connect(url, {
+    clientId:"naro_" + me.uid + "_" + Math.random().toString(16).slice(2,8),
+    clean:true, reconnectPeriod:3000, connectTimeout:12000,
+    will:{ topic:presTopic, payload:"", retain:true, qos:0 }
+  });
+  c.on("connect", () => {
+    c.subscribe([P + "m/#", P + "p/#", P + "c/#", P + "r/#"], { qos:0 });
+    c.publish(presTopic, JSON.stringify({ name:me.name, ts:Date.now() }), { retain:true, qos:0 });
+    updateStatus(); scheduleRender();
+  });
+  c.on("close", updateStatus); c.on("offline", updateStatus); c.on("error", () => {});
+  c.on("message", onMessage);
+  clients.push(c);
+}
+
+function updateStatus(){
+  const n = connectedCount();
+  $("dot").classList.toggle("on", n > 0);
+  if(!n){ $("status").textContent = "Connecting…"; return; }
+  const cutoff = Date.now() - 80000; let online = 0;
+  peers.forEach(p => { if(p.ts > cutoff) online++; });
+  $("status").textContent = Math.max(online, 1) + " online";
+}
+
+/* ---------- rendering ---------- */
+function scheduleRender(){ clearTimeout(renderT); renderT = setTimeout(render, 70); }
+function canDelete(m){ return me.admin || (m.uid === me.uid && me.vip); }
+
+function render(){
+  const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 160;
+  const prevTop = box.scrollTop;
+  const list = [...msgs.entries()]
+    .filter(([id, m]) => !(m.uid && isBanned(m.uid)))
+    .sort((a,b) => (a[1].ts - b[1].ts) || (a[0] < b[0] ? -1 : 1)).slice(-300);
+  box.textContent = "";
+
+  if(settings.welcome){ const w = el("div", "welcome glass", settings.welcome); box.appendChild(w); }
+  if(!list.length){
+    box.appendChild(el("div", "empty glass", connectedCount() ? "No messages yet. Say hello." : "Connecting to the chat…"));
+    lastNewest = null; return;
+  }
+
+  let lastDay = "", prev = null;
+  for(const [id, m] of list){
+    const dl = dayLabel(m.ts || Date.now());
+    if(dl !== lastDay){ box.appendChild(el("div", "day", dl)); lastDay = dl; prev = null; }
+
+    if(m.type === "sys"){ box.appendChild(el("div", "sys", m.text)); prev = null; continue; }
+    if(m.type === "announce"){
+      const a = el("div", "announce");
+      a.appendChild(el("div", "t", "📣 Announcement"));
+      a.appendChild(el("div", "b", mask(m.text)));
+      box.appendChild(a); prev = null; continue;
+    }
+
+    const mine = m.uid === me.uid;
+    const grouped = prev && prev.uid === m.uid && (m.ts - prev.ts) < 180000;
+    const row = el("div", "row " + (mine ? "out" : "in") + (grouped ? " grouped" : " first") + (openId === id ? " open" : ""));
+
+    if(!mine){ row.appendChild(grouped ? el("span", "spacer") : avatar(m.uid || "x", m.name)); }
+
+    const col = el("div", "col");
+    if(!grouped && !mine){
+      const who = el("div", "who");
+      const nm = el("span", "", m.name); nm.style.color = nameColor(m.uid || "x"); who.appendChild(nm);
+      if(m.role === "admin") who.appendChild(el("span", "tag admin", "ADMIN"));
+      if(m.vip) who.appendChild(el("span", "tag vip", "VIP"));
+      col.appendChild(who);
+    }
+
+    const bub = el("div", "bubble" + (m.role === "admin" ? " admin" : "") + (m.vip && m.role !== "admin" ? " vip" : ""));
+    const body = el("div", "body", mask(m.text)); body.dir = "auto";
+    bub.appendChild(body); bub.appendChild(el("div", "meta", timeFmt(m.ts)));
+    bub.onclick = () => { openId = (openId === id) ? null : id; render(); };
+    col.appendChild(bub);
+
+    const mp = reacts.get(id);
+    if(mp && mp.size){
+      const counts = new Map(); mp.forEach(e => counts.set(e, (counts.get(e)||0) + 1));
+      const rs = el("div", "reacts");
+      counts.forEach((n, e) => {
+        const chip = el("button", "chip" + (mp.get(me.uid) === e ? " mine" : ""), e + (n > 1 ? " " + n : ""));
+        chip.onclick = (ev) => { ev.stopPropagation(); toggleReact(id, e); };
+        rs.appendChild(chip);
+      });
+      col.appendChild(rs);
+    }
+
+    const bar = el("div", "abar");
+    REACTS.forEach(e => { const b = el("button", "", e); b.onclick = (ev) => { ev.stopPropagation(); toggleReact(id, e); openId = null; render(); }; bar.appendChild(b); });
+    if(canDelete(m)){
+      bar.appendChild(el("span", "sep"));
+      const d = el("button", "", "🗑"); d.title = "Delete";
+      d.onclick = (ev) => { ev.stopPropagation(); deleteMsg(id); };
+      bar.appendChild(d);
+    }
+    col.appendChild(bar);
+    row.appendChild(col); box.appendChild(row);
+    prev = m;
+  }
+
+  const newestId = list[list.length-1][0];
+  const newestMine = list[list.length-1][1].uid === me.uid;
+  const isNew = newestId !== lastNewest;
+  if(firstRender || (isNew && (nearBottom || newestMine))) box.scrollTop = box.scrollHeight;
+  else box.scrollTop = prevTop;
+  lastNewest = newestId; firstRender = false;
+}
+
+function toggleReact(id, e){
+  const mp = reacts.get(id);
+  const same = mp && mp.get(me.uid) === e;
+  const topic = P + "r/" + id + "/" + me.uid;
+  if(same){ mp.delete(me.uid); if(!mp.size) reacts.delete(id); pubAll(topic, ""); }
+  else { let m2 = mp; if(!m2){ m2 = new Map(); reacts.set(id, m2); } m2.set(me.uid, e); pubAll(topic, e); }
+  scheduleRender();
+}
+function deleteMsg(id){
+  msgs.delete(id); reacts.delete(id); openId = null; scheduleRender();
+  pubAll(P + "m/" + id, "");
+}
+
+/* ---------- sending ---------- */
+let lastSend = 0;
+function publishMsg(obj){
+  const ts = Date.now();
+  const id = ts.toString(36).padStart(9,"0") + Math.random().toString(36).slice(2,6);
+  const m = Object.assign({ ts }, obj);
+  msgs.set(id, m); scheduleRender();
+  pubAll(P + "m/" + id, JSON.stringify(m));
+}
+function send(){
+  const input = $("text"), text = input.value.trim();
+  if(!text) return;
+  const clear = () => { input.value = ""; autosize(); };
+
+  // commands work even when locked
+  const up = text.toUpperCase();
+  if(up === VIP_COMMAND.toUpperCase()){
+    clear();
+    if(me.vip){ toast("VIP is already active 👑"); return; }
+    me.vip = true; saveMe(); applyMe(); toast("VIP activated 👑");
+    if(connectedCount()) publishMsg({ type:"sys", text:"👑 " + me.name + " activated VIP" });
+    return;
+  }
+  if(up.startsWith(ADMIN_COMMAND.toUpperCase() + " ") || up === ADMIN_COMMAND.toUpperCase()){
+    const pass = text.slice(ADMIN_COMMAND.length).trim();
+    clear();
+    if(pass === "off"){ me.admin = false; saveMe(); applyMe(); closePanel(); toast("Admin mode off"); return; }
+    if(pass === ADMIN_PASS){ me.admin = true; saveMe(); applyMe(); updateComposer(); toast("Admin mode on 🛡 Tap the shield"); }
+    else toast("Wrong admin password");
+    return;
+  }
+
+  if(!connectedCount()){ toast("Not connected yet. Retrying…"); return; }
+  const r = blockReason(); if(r){ toast(r); return; }
+  const now = Date.now();
+  if(!me.admin && settings.slow && now - lastSend < settings.slow * 1000){
+    toast("Slow mode: wait " + Math.ceil((settings.slow*1000 - (now - lastSend)) / 1000) + "s"); return;
+  }
+  if(now - lastSend < 400) return;
+  lastSend = now;
+
+  const m = { uid:me.uid, name:me.name, text:text.slice(0,1000) };
+  if(me.vip) m.vip = true;
+  if(me.admin) m.role = "admin";
+  publishMsg(m); clear(); input.focus();
+}
+$("send").onclick = send;
+$("text").addEventListener("keydown", e => { if(e.key === "Enter" && !e.shiftKey){ e.preventDefault(); send(); } });
+function autosize(){ const t = $("text"); t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 130) + "px"; }
+$("text").addEventListener("input", autosize);
+
+"😀 😂 🤣 😍 😘 😎 🥳 😢 😭 😡 👍 👏 🙏 💪 🔥 ❤️ 💔 🎉 ✨ 😴 🤔 😅 😉 🙌 💯 👀 🤝 🫶".split(" ").forEach(e => {
+  const b = el("button", "", e); b.onclick = () => { const t = $("text"); t.value += e; t.focus(); autosize(); };
+  $("emojis").appendChild(b);
+});
+$("emojibtn").onclick = () => $("emojis").classList.toggle("open");
+
+/* ================= ADMIN PANEL ================= */
+let tab = "controls";
+const panel = $("panel"), scrim = $("scrim");
+function openPanel(){ if(!me.admin) return; panel.classList.add("open"); scrim.classList.add("show"); buildTab(); }
+function closePanel(){ panel.classList.remove("open"); scrim.classList.remove("show"); }
+$("adminBtn").onclick = openPanel; $("pclose").onclick = closePanel; scrim.onclick = closePanel;
+document.addEventListener("keydown", e => { if(e.key === "Escape") closePanel(); });
+$("tabs").addEventListener("click", e => {
+  const b = e.target.closest("button"); if(!b) return;
+  tab = b.dataset.t; [...$("tabs").children].forEach(x => x.classList.toggle("on", x === b)); buildTab();
+});
+function refreshPanel(which){ if(panel.classList.contains("open") && tab === which) buildTab(); }
+
+function card(title, desc, ...kids){
+  const c = el("div", "card"); c.appendChild(el("h3", "", title)); if(desc) c.appendChild(el("p", "", desc));
+  kids.forEach(k => c.appendChild(k)); return c;
+}
+function btn(label, cls, fn){ const b = el("button", "btn " + (cls||""), label); b.onclick = fn; return b; }
+function btns(...b){ const d = el("div", "btns"); b.forEach(x => d.appendChild(x)); return d; }
+function field(tag, value, ph){
+  const f = document.createElement(tag); f.className = "field"; f.value = value || ""; if(ph) f.placeholder = ph;
+  if(tag === "textarea") f.rows = 2; return f;
+}
+function switchEl(checked, fn){
+  const w = el("label", "sw"); const i = document.createElement("input"); i.type = "checkbox"; i.checked = checked;
+  i.onchange = () => fn(i.checked); w.appendChild(i); w.appendChild(el("s")); return w;
+}
+
+function buildTab(){
+  const body = $("pbody"); body.textContent = "";
+  if(tab === "controls") buildControls(body);
+  else if(tab === "users") buildUsers(body);
+  else buildTools(body);
+}
+
+function buildControls(body){
+  const lock = el("div", "line");
+  lock.appendChild(switchEl(settings.lock, v => saveSettings({ lock:v })));
+  const lockCard = card("Lock chat", "Only admins can send messages while this is on.");
+  lockCard.appendChild(lock); lock.insertBefore(el("span", "", settings.lock ? "Locked" : "Open"), lock.firstChild);
+  body.appendChild(lockCard);
+
+  const sel = document.createElement("select"); sel.className = "field";
+  [[0,"Off"],[5,"5 seconds"],[15,"15 seconds"],[30,"30 seconds"],[60,"1 minute"],[300,"5 minutes"]].forEach(([v,l]) => {
+    const o = document.createElement("option"); o.value = v; o.textContent = l; if(settings.slow === v) o.selected = true; sel.appendChild(o);
+  });
+  sel.onchange = () => saveSettings({ slow:Number(sel.value) });
+  body.appendChild(card("Slow mode", "Minimum time between messages for non-admins.", sel));
+
+  const t = field("input", settings.title, "Room name"); t.maxLength = 40;
+  body.appendChild(card("Room name", "Shown at the top for everyone.", t, btns(btn("Save name", "pri", () => saveSettings({ title:t.value.trim() || defaults.title })))));
+
+  const col = document.createElement("input"); col.type = "color"; col.value = /^#[0-9a-f]{6}$/i.test(settings.accent) ? settings.accent : "#8b5cf6";
+  col.style.cssText = "width:100%;height:44px;border:1px solid var(--line);border-radius:12px;background:var(--glass);padding:3px;cursor:pointer";
+  body.appendChild(card("Accent color", "Changes the theme color for everyone in the room.", col,
+    btns(btn("Apply", "pri", () => saveSettings({ accent:col.value })), btn("Reset", "", () => { saveSettings({ accent:"" }); buildTab(); }))));
+
+  const pin = field("textarea", settings.pin, "Pinned message"); pin.maxLength = 500;
+  body.appendChild(card("Pinned message", "Stays visible under the header.", pin,
+    btns(btn("Pin", "pri", () => saveSettings({ pin:pin.value.trim() })), btn("Unpin", "", () => { saveSettings({ pin:"" }); pin.value = ""; }))));
+
+  const wl = field("textarea", settings.welcome, "Welcome message"); wl.maxLength = 500;
+  body.appendChild(card("Welcome card", "Shown at the top of the chat for newcomers.", wl,
+    btns(btn("Save", "pri", () => saveSettings({ welcome:wl.value.trim() })), btn("Remove", "", () => { saveSettings({ welcome:"" }); wl.value = ""; }))));
+
+  const wd = field("input", settings.words.join(", "), "word1, word2, word3");
+  body.appendChild(card("Word filter", "Hidden words are replaced with dots for everyone. Separate with commas.", wd,
+    btns(btn("Save list", "pri", () => saveSettings({ words:wd.value.split(",").map(s => s.trim()).filter(Boolean).slice(0,100) })))));
+}
+
+function buildUsers(body){
+  const known = new Map();
+  msgs.forEach(m => { if(m.uid && m.uid !== me.uid) known.set(m.uid, { name:m.name, vip:!!m.vip, role:m.role }); });
+  peers.forEach((p, uid) => { if(uid !== me.uid) known.set(uid, Object.assign({}, known.get(uid) || {}, { name:p.name || (known.get(uid)||{}).name || uid })); });
+  bans.forEach((b, uid) => { if(!known.has(uid)) known.set(uid, { name:b.name || uid }); });
+  $("psub").textContent = known.size + " known user" + (known.size === 1 ? "" : "s");
+
+  if(!known.size){ body.appendChild(el("div", "none", "No other users yet.")); return; }
+  const cutoff = Date.now() - 80000;
+
+  [...known.entries()].forEach(([uid, u]) => {
+    const row = el("div", "urow");
+    row.appendChild(avatar(uid, u.name || "?"));
+    const info = el("div", "info"); info.appendChild(el("div", "nm", u.name || uid));
+    const st = el("div", "st");
+    const p = peers.get(uid); if(p && p.ts > cutoff) st.appendChild(el("span", "pill-s on", "ONLINE"));
+    const b = activeBan(uid);
+    if(b) st.appendChild(el("span", "pill-s " + (b.type === "ban" ? "bad" : "warn"), b.type === "ban" ? "BANNED" : "MUTED"));
+    if(u.vip) st.appendChild(el("span", "pill-s gold", "VIP"));
+    if(u.role === "admin") st.appendChild(el("span", "pill-s bad", "ADMIN"));
+    info.appendChild(st); row.appendChild(info);
+
+    const ua = el("div", "ua");
+    const act = (label, fn) => { const x = el("button", "", label); x.onclick = fn; ua.appendChild(x); };
+    if(b) act("Lift", () => { bans.delete(uid); pubAll(P + "c/ban/" + uid, ""); updateComposer(); scheduleRender(); buildTab(); toast("Restriction lifted"); });
+    else {
+      act("Mute", () => {
+        const mins = Number(prompt("Mute for how many minutes? (0 = until lifted)", "10"));
+        if(isNaN(mins) || mins < 0) return;
+        setBan(uid, u.name, "mute", mins * 60000);
+      });
+      act("Ban", () => { if(confirm("Ban " + (u.name || uid) + "? Their messages will be hidden.")) setBan(uid, u.name, "ban", 0); });
+    }
+    act(u.vip ? "Remove VIP" : "Give VIP", () => {
+      if(u.vip) pubAll(P + "c/vip/" + uid, ""); else pubAll(P + "c/vip/" + uid, JSON.stringify({ on:true }));
+      toast(u.vip ? "VIP removal sent" : "VIP granted"); setTimeout(buildTab, 300);
+    });
+    row.appendChild(ua); body.appendChild(row);
+  });
+}
+function setBan(uid, name, type, ms){
+  const b = { type, until:ms ? Date.now() + ms : 0, name:String(name||"").slice(0,24) };
+  bans.set(uid, b); pubAll(P + "c/ban/" + uid, JSON.stringify(b));
+  updateComposer(); scheduleRender(); buildTab(); toast(type === "ban" ? "User banned" : "User muted");
+}
+
+function buildTools(body){
+  $("psub").textContent = "Moderate and manage the room";
+  const cutoff = Date.now() - 80000; let online = 0; peers.forEach(p => { if(p.ts > cutoff) online++; });
+  const users = new Set(); msgs.forEach(m => { if(m.uid) users.add(m.uid); });
+  const stats = el("div", "stats");
+  [[msgs.size, "Messages"], [Math.max(online,1), "Online now"], [users.size, "Users seen"],
+   [connectedCount() + "/" + BROKERS.length, "Servers linked"], [[...bans.values()].filter(b => !b.until || b.until > Date.now()).length, "Restricted"], [reacts.size, "Reacted msgs"]
+  ].forEach(([n, l]) => { const s = el("div", "stat"); s.appendChild(el("b", "", String(n))); s.appendChild(el("span", "", l)); stats.appendChild(s); });
+  body.appendChild(stats);
+
+  const an = field("textarea", "", "Write an announcement…"); an.maxLength = 500;
+  body.appendChild(card("Announcement", "Sends a highlighted card to everyone in the chat.", an,
+    btns(btn("Send announcement", "pri", () => {
+      const t = an.value.trim(); if(!t) return;
+      publishMsg({ type:"announce", text:t, name:me.name }); an.value = ""; toast("Announcement sent");
+    }))));
+
+  body.appendChild(card("Export chat", "Download the current history as a text file.",
+    btns(btn("Download .txt", "", () => {
+      const lines = [...msgs.values()].sort((a,b) => a.ts - b.ts).map(m => {
+        const d = new Date(m.ts); const stamp = d.toLocaleDateString() + " " + timeFmt(m.ts);
+        return "[" + stamp + "] " + (m.type === "sys" || m.type === "announce" ? "* " : (m.name + ": ")) + m.text;
+      });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type:"text/plain" }));
+      a.download = "chat-export.txt"; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    }))));
+
+  body.appendChild(card("Clear chat", "Deletes every message and reaction for everyone. This cannot be undone.",
+    btns(btn("Clear everything", "danger", () => {
+      if(!confirm("Delete ALL messages for everyone?")) return;
+      const ids = [...msgs.keys()], rkeys = [];
+      reacts.forEach((mp, id) => mp.forEach((e, uid) => rkeys.push(P + "r/" + id + "/" + uid)));
+      ids.forEach(id => pubAll(P + "m/" + id, ""));
+      rkeys.forEach(t => pubAll(t, ""));
+      msgs.clear(); reacts.clear(); openId = null; scheduleRender();
+      setTimeout(() => publishMsg({ type:"sys", text:"🧹 Chat cleared by " + me.name }), 400);
+      toast("Chat cleared"); buildTab();
+    }))));
+
+  body.appendChild(card("Admin session", "Type /ADMIN off in the chat or use the button to leave admin mode.",
+    btns(btn("Leave admin mode", "", () => { me.admin = false; saveMe(); applyMe(); updateComposer(); closePanel(); toast("Admin mode off"); }))));
+}
+
+/* ---------- boot ---------- */
+applyMe(); applySettings(); updateComposer();
+if(typeof mqtt === "undefined"){
+  $("status").textContent = "Could not load the library. Check your connection.";
+} else {
+  BROKERS.forEach(startClient);
+  setInterval(beat, 30000);
+  setInterval(() => { updateStatus(); updateComposer(); }, 10000);
+  setTimeout(scheduleRender, 2000);
+  const wake = () => clients.forEach(c => { if(!c.connected) try{ c.reconnect(); }catch(e){} });
+  document.addEventListener("visibilitychange", () => { if(!document.hidden) wake(); });
+  window.addEventListener("online", wake);
+}
+</script>
+</body>
+</html>
